@@ -1,0 +1,40 @@
+from pystac_client import Client
+from shapely.geometry import box, mapping
+import requests, rasterio
+
+# 1) Connect to the GFM STAC API
+STAC_URL = "https://stac.eodc.eu/api/v1"
+client = Client.open(STAC_URL)
+
+# 2) Define your search (bbox = [minx, miny, maxx, maxy] in lon/lat)
+bbox = [77.45, 12.8, 77.75, 13.1]        # example: a Bengaluru AOI
+time = "2024-10-01/2024-10-31"           # example time window
+collection = "GFM"
+
+search = client.search(collections=[collection], bbox=bbox, datetime=time)
+items = list(search.get_items())
+print(f"Found {len(items)} GFM item(s)")
+
+# 3) Inspect available assets on the first item
+item = items[0]
+print("Assets:", list(item.assets.keys()))
+
+# Common asset names include flood extent and likelihood; pick what you need:
+# Try 'flood_extent', 'ensemble_flood', or similar depending on the item:
+asset_key = next(k for k in item.assets.keys() if "flood" in k and "extent" in k)
+asset = item.assets[asset_key]
+href = asset.href  # signed URL to the GeoTIFF
+
+# 4) Download the GeoTIFF
+out_path = "gfm_flood_extent.tif"
+with requests.get(href, stream=True) as r:
+    r.raise_for_status()
+    with open(out_path, "wb") as f:
+        for chunk in r.iter_content(chunk_size=1<<20):
+            f.write(chunk)
+
+print("Saved:", out_path)
+
+# (Optional) Read with rasterio
+with rasterio.open(out_path) as ds:
+    print(ds.count, ds.width, ds.height, ds.crs)
