@@ -1,0 +1,147 @@
+# import packages
+import numpy as np
+import pandas as pd
+import os
+import glob
+import re
+from pathlib import Path
+from simpledbf import Dbf5
+
+# Initialize an empty list to store results from multiple files
+results_list = []
+
+emsr_folder = r"C:\Users\Student\Documents\OFYP\flood\events\EMSR"
+
+# # get EMSR, AOI, MONIT id
+# def get_emsr_id(p) -> str | None:
+#     """Return 'EMSR###' (any length) from a path string, else None."""
+#     m = re.search(r'(EMSR\d+)', str(p), re.IGNORECASE)
+#     return m.group(1).upper() if m else None
+
+# def get_aoi_id(p):
+#     m = re.search(r'(AOI\d+)', str(p), re.IGNORECASE)
+#     return m.group(1).upper() if m else None
+
+# def get_monit_id(p):
+#     m = re.search(r'(MONIT\d+)', str(p), re.IGNORECASE)
+#     return m.group(1).upper() if m else 'DNE'
+
+# find AOI file
+def find_aoi_file(folder_path):
+     aoi_files = glob.glob(os.path.join(folder_path, '*_areaOfInterestA_*.json'))
+     if aoi_files:
+        return aoi_files[0]  # Return the first match
+     
+# find observed event (oe) file
+def find_oe_file(folder_path):
+     oe_files = glob.glob(os.path.join(folder_path, '*_observedEventA_*.json'))
+     return oe_files[0] if oe_files else 'DNE'  # Return the first match
+     
+# find max flood extent (mfe) file
+def find_mfe_file(folder_path):
+     mfe_files = glob.glob(os.path.join(folder_path, '*_maximumFloodExtentA_*.json'))
+     return mfe_files[0] if mfe_files else 'DNE' # Return the first match
+     
+    
+def extract_variables(df, source_file, aoi_file, oe_file, mfe_file):
+    try:
+        #Activation number
+        activation_no = Path(folder_path).name #grabbing the name of the folder
+
+        # Post-event data
+        idx_post = df[df['eventphase']=='Post-event'].index.item()
+        satellite_post = df.source_nam[idx_post]
+        date_post = df.src_date[idx_post]
+        tm_post = df.source_tm[idx_post]
+        
+        # Pre-event data
+        try:
+            idx_pre = df[df['source_nam']=='Sentinel-2'].index.item()
+            satellite_pre = df.source_nam[idx_pre]
+            date_pre = df.src_date[idx_pre]
+            tm_pre = df.source_tm[idx_pre]
+
+        except (ValueError, IndexError):
+            # No Open Street Map found
+            satellite_pre = 'DNE' #Does Not Exist
+            date_pre = 'DNE'
+            tm_pre = 'DNE'
+        
+        # Event date
+        try:
+            event_idx = df[df['source_nam']=='Open Street Map'].index.item()
+            event_date = df.src_date[event_idx]
+            event_source = 'Open Street Map'
+        except (ValueError, IndexError):
+            # No Open Street Map found
+            event_date = 'DNE' #Does Not Exist
+            event_source = 'DNE'
+        
+        # Single row with all data
+        row = {
+            'Activation Number': activation_no,   # -> 'EMSR789_AOI02_DEL_MONIT05_v1'
+            'Event_Date': event_date,
+            'Event_Source': event_source,
+            
+            'Post_Date': date_post,
+            'Post_Time': tm_post,
+            'Post_Satellite': satellite_post,
+
+            'Pre_Date': date_pre,
+            'Pre_Time': tm_pre,
+            'Pre_Satellite': satellite_pre,
+
+            'Source_dbf File': source_file,
+            'AOI_File': aoi_file,
+            'Observed_Extent': oe_file,
+            'Max_Flood_Extent': mfe_file
+        }
+        
+        return row
+    
+    except Exception as e:
+        print(f"Error extracting variables from {source_file}: {e}")
+        return None
+
+# Define the main EMSR folder path
+emsr_folder = r"C:\Users\Student\Documents\OFYP\flood\events\EMSR"  
+
+# Find all source_v1.dbf files in subdirectories
+dbf_paths = glob.glob(os.path.join(emsr_folder, '*', '*_source_v1.dbf'))
+
+for dbf_path in dbf_paths:
+    # Read the file
+    df = Dbf5(dbf_path).to_dataframe()  # Adjust reading method as needed
+    
+    # Get the folder containing the DBF file
+    folder_path = os.path.dirname(dbf_path)
+    
+    # Find AOI,oe and mfe file in the same folder
+    aoi_file = find_aoi_file(folder_path)
+    oe_file = find_oe_file(folder_path)
+    mfe_file = find_mfe_file(folder_path)
+    
+    # Extract variables
+    row = extract_variables(df, dbf_path, aoi_file,oe_file,mfe_file)
+
+    # Add row to results list
+    if row:
+        results_list.append(row)
+
+# Create final table with all results
+results_table = pd.DataFrame(results_list)
+
+# Display the table
+print(results_table)
+
+# Optionally save to CSV
+results_table.to_excel('extracted_results_2.xlsx', index=False)
+
+# Save to Excel with auto-adjusted column widths
+# done" pip install xlsxwriter
+with pd.ExcelWriter('extracted_results_2.xlsx', engine='xlsxwriter') as writer:
+    results_table.to_excel(writer, index=False, sheet_name='Results')
+    ws = writer.sheets['Results']
+    for i, col in enumerate(results_table.columns):
+        col_len = max(len(col), results_table[col].astype(str).map(len).max()) + 2
+        ws.set_column(i, i, min(col_len, 30))
