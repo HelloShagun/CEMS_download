@@ -1,30 +1,8 @@
-# import packages
-import numpy as np
-import pandas as pd
-import os
-import glob
-import re
-from pathlib import Path
-from simpledbf import Dbf5
-
 # Initialize an empty list to store results from multiple files
 results_list = []
 
+#HARDCODED (only hardoded line i believe - only need to edit this to your local computer path)
 emsr_folder = r"C:\Users\Student\Documents\OFYP\flood\events\EMSR"
-
-# # get EMSR, AOI, MONIT id
-# def get_emsr_id(p) -> str | None:
-#     """Return 'EMSR###' (any length) from a path string, else None."""
-#     m = re.search(r'(EMSR\d+)', str(p), re.IGNORECASE)
-#     return m.group(1).upper() if m else None
-
-# def get_aoi_id(p):
-#     m = re.search(r'(AOI\d+)', str(p), re.IGNORECASE)
-#     return m.group(1).upper() if m else None
-
-# def get_monit_id(p):
-#     m = re.search(r'(MONIT\d+)', str(p), re.IGNORECASE)
-#     return m.group(1).upper() if m else 'DNE'
 
 # find AOI file
 def find_aoi_file(folder_path):
@@ -103,9 +81,6 @@ def extract_variables(df, source_file, aoi_file, oe_file, mfe_file):
         print(f"Error extracting variables from {source_file}: {e}")
         return None
 
-# Define the main EMSR folder path
-emsr_folder = r"C:\Users\Student\Documents\OFYP\flood\events\EMSR"  
-
 # Find all source_v1.dbf files in subdirectories
 dbf_paths = glob.glob(os.path.join(emsr_folder, '*', '*_source_v1.dbf'))
 
@@ -135,11 +110,11 @@ results_table = pd.DataFrame(results_list)
 print(results_table)
 
 # Optionally save to CSV
-results_table.to_excel('extracted_results_2.xlsx', index=False)
+results_table.to_excel('extracted_results.xlsx', index=False)
 
 # Save to Excel with auto-adjusted column widths
 # done" pip install xlsxwriter
-with pd.ExcelWriter('extracted_results_2.xlsx', engine='xlsxwriter') as writer:
+with pd.ExcelWriter('extracted_results.xlsx', engine='xlsxwriter') as writer:
     results_table.to_excel(writer, index=False, sheet_name='Results')
     ws = writer.sheets['Results']
     for i, col in enumerate(results_table.columns):
