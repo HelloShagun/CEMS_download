@@ -1,7 +1,22 @@
+# import packages
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import shape
+from shapely.geometry import mapping
+import os
+import glob
+import re
+from pathlib import Path
+from simpledbf import Dbf5
+
+# OUTPUT excel file ----------------------------- HARDCODED ------------------------------------------------------------------------
+output_file = 'extracted_results.xlsx'
+
 # Initialize an empty list to store results from multiple files
 results_list = []
 
-#HARDCODED (only hardoded line i believe - only need to edit this to your local computer path)
+#HARDCODED (only hardoded line i believe - only need to edit this to your path)
 emsr_folder = r"C:\Users\Student\Documents\OFYP\flood\events\EMSR"
 
 # find AOI file
@@ -9,6 +24,10 @@ def find_aoi_file(folder_path):
      aoi_files = glob.glob(os.path.join(folder_path, '*_areaOfInterestA_*.json'))
      if aoi_files:
         return aoi_files[0]  # Return the first match
+     
+# def aoi_coords(folder_path):
+#      gdf = gpd.read_file(folder_path).to_crs(4326)
+#      aoi_coords = mapping(gdf.geometry.iloc[0]) 
      
 # find observed event (oe) file
 def find_oe_file(folder_path):
@@ -31,6 +50,7 @@ def extract_variables(df, source_file, aoi_file, oe_file, mfe_file):
         satellite_post = df.source_nam[idx_post]
         date_post = df.src_date[idx_post]
         tm_post = df.source_tm[idx_post]
+        gdf = gpd.read_file(aoi_file).to_crs(4326)
         
         # Pre-event data
         try:
@@ -71,6 +91,7 @@ def extract_variables(df, source_file, aoi_file, oe_file, mfe_file):
 
             'Source_dbf File': source_file,
             'AOI_File': aoi_file,
+            'AOI_Coords': mapping(gdf.geometry.iloc[0]), # dict ready for STAC intersects=
             'Observed_Extent': oe_file,
             'Max_Flood_Extent': mfe_file
         }
@@ -110,11 +131,11 @@ results_table = pd.DataFrame(results_list)
 print(results_table)
 
 # Optionally save to CSV
-results_table.to_excel('extracted_results.xlsx', index=False)
+results_table.to_excel(output_file, index=False)
 
 # Save to Excel with auto-adjusted column widths
 # done" pip install xlsxwriter
-with pd.ExcelWriter('extracted_results.xlsx', engine='xlsxwriter') as writer:
+with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
     results_table.to_excel(writer, index=False, sheet_name='Results')
     ws = writer.sheets['Results']
     for i, col in enumerate(results_table.columns):
