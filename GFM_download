@@ -1,0 +1,106 @@
+# Uploaded 28 Oct 2025 by He Ningxin
+# Using AOI coordinates from EMSR files to pull files that intersect with this area from GFM
+# Output will be in bundled zip format, inside the output folder defined in line 12
+# HARDCODED: line 12,18,22
+
+from pystac_client import Client
+from shapely.geometry import box, mapping
+import requests, rasterio
+import geopandas as gpd
+
+# Inputs   ------------------------------------------------------------------HARDCODED-------------------------------------------
+out_path = r"C:\Users\Student\Documents\OFYP\flood\events\GFM\test_bruh2"
+
+# 1) Connect to the GFM STAC API
+STAC_URL = "https://stac.eodc.eu/api/v1"
+client = Client.open(STAC_URL)
+
+# 2) Define your search, coordinates extracted from EMSR aoi file -> to be automated in the future #-------HARDCODED---------
+gdf = gpd.read_file(r"C:\Users\Student\Documents\OFYP\flood\events\EMSR\EMSR789_AOI01_DEL_MONIT05_v1\EMSR789_AOI01_DEL_MONIT05_areaOfInterestA_v1.json").to_crs(4326)
+aoi = mapping(gdf.geometry.iloc[0])   # dict ready for STAC intersects=
+
+time = "2025-03-07/2025-03-09"  #-> to be automated in the future  ------HARDCODED---------
+collection = "GFM"
+
+search = client.search(
+    collections=[collection], 
+    intersects = aoi, #allows for multiple coords
+    datetime=time)
+items = list(search.get_items())
+print(f"Found {len(items)} GFM item(s)")
+
+#3) Inspect available assets on the first item
+item = items[0]
+print("Assets:", list(item.assets.keys()))
+
+# Common asset names include flood extent and likelihood; pick what you need:
+# Try 'flood_extent', 'ensemble_flood', or similar depending on the item:
+asset_key = next(k for k in item.assets.keys() if "flood" in k and "extent" in k)
+asset = item.assets[asset_key]
+href = asset.href  # signed URL to the GeoTIFF
+
+# # 4) Download the GeoTIFF
+
+# with requests.get(href, stream=True) as r:
+#     r.raise_for_status()
+#     with open(out_path, "wb") as f:
+#         for chunk in r.iter_content(chunk_size=1<<20):
+#             f.write(chunk)
+
+# print("Saved:", out_path)
+
+# # (Optional) Read with rasterio
+# with rasterio.open(out_path) as ds:
+#     print(ds.count, ds.width, ds.height, ds.crs)
+
+#-----
+#ZIP flood layers per item without leaving TIFs on disk
+import os, requests, zipfile, tempfile, pathlib
+os.makedirs(out_path, exist_ok=True)
+
+KEEP = ("flood", "extent", "exclusion", "mask")  # narrow if needed
+
+for it in items:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        grabbed = []
+        for key, a in it.assets.items():
+            if any(t in key.lower() for t in KEEP):
+                url  = a.href
+                base = url.split("?", 1)[0]
+                ext  = os.path.splitext(base)[1] or ".tif"
+                fn   = f"{it.id}__{key}{ext}"
+                fp   = tmp / fn
+                with requests.get(url, stream=True) as r:
+                    r.raise_for_status()
+                    with open(fp, "wb") as f:
+                        for c in r.iter_content(1<<20):
+                            f.write(c)
+                grabbed.append(fp)
+
+        if grabbed:
+            zfp = os.path.join(out_path, f"{it.id}_gfm_bundle.zip")
+            with zipfile.ZipFile(zfp, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                for fp in grabbed:
+                    z.write(fp, arcname=fp.name)
+            print("Bundled:", zfp)
+#temp folders auto-delete → no stray TIFs
+
+# Download only GFM vector assets (shapefile zips / GPKG / GeoJSON)
+import os, requests
+os.makedirs(out_path, exist_ok=True)
+
+saved = 0
+for it in items:
+    for key, a in it.assets.items():
+        href_no_q = a.href.split("?", 1)[0]
+        ext = os.path.splitext(href_no_q)[1].lower()
+        if ext in (".zip", ".shp", ".gpkg", ".geojson") and ("flood" in key.lower() or "extent" in key.lower()):
+            fn = f"{it.id}__{key}{ext or '.zip'}"
+            with requests.get(a.href, stream=True) as r:
+                r.raise_for_status()
+                with open(os.path.join(out_path, fn), "wb") as f:
+                    for c in r.iter_content(1<<20):
+                        f.write(c)
+            print("Saved:", fn); saved += 1
+print("Total vector files saved:", saved)
