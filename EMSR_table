@@ -1,3 +1,6 @@
+#last modified 28 Oct 2025, He Ningxin
+# output results in 'extracted_results.xlsx'
+
 # import packages
 import numpy as np
 import pandas as pd
@@ -12,12 +15,10 @@ from simpledbf import Dbf5
 
 # OUTPUT excel file ----------------------------- HARDCODED ------------------------------------------------------------------------
 output_file = 'extracted_results.xlsx'
+emsr_folder = r"C:\Users\Student\Documents\OFYP\flood\events\EMSR"
 
 # Initialize an empty list to store results from multiple files
 results_list = []
-
-#HARDCODED (only hardoded line i believe - only need to edit this to your path)
-emsr_folder = r"C:\Users\Student\Documents\OFYP\flood\events\EMSR"
 
 # find AOI file
 def find_aoi_file(folder_path):
